@@ -45,15 +45,12 @@ namespace ffmpeg
     private:
 		enum AVHWDeviceType _device_type;
 
-    private:
-        cv::Size _target_size;
-
-    private:
-        cv::cuda::GpuMat _temp;
-
 	private:
 		NppStreamContext _npp_stream_ctx;
-		NppiSize _npp_size;
+
+	private:
+		cv::Size _target_size;
+		cv::cuda::GpuMat _buffer;
 
     private:
         GpuMatConverter() = delete;
