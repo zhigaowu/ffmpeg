@@ -35,12 +35,7 @@ namespace ffmpeg
     class Demuxer
     {
 	public:
-		static inline bool IsVideo(const AVPacket* packet)
-		{
-			return (int)(packet->opaque) == AVMEDIA_TYPE_VIDEO;
-		}
-
-		static inline bool KeyPacket(const AVPacket* packet)
+		static inline bool IsKeyPacket(const AVPacket* packet)
 		{
 			return (packet->flags & AV_PKT_FLAG_KEY) == AV_PKT_FLAG_KEY;
 		}
@@ -70,7 +65,7 @@ namespace ffmpeg
 
         int Seek(int64_t seek_micros);
 
-        int Read(AVPacket** packet);
+        int Read(AVPacket* packet);
 
 		bool Local();
 

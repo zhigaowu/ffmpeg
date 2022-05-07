@@ -13,72 +13,79 @@
 
 #include <chrono>
 
-#define CUDA_STREAM(stream) static_cast<cudaStream_t>(stream.cudaPtr())
+#define CUDA_STREAM(stream) static_cast<cudaStream_t>((stream).cudaPtr())
 
 namespace ffmpeg 
 {
-    GpuMatConverter::GpuMatConverter(enum AVHWDeviceType device_type, int device_index, const cv::Size& target_size)
+    GpuMatConverter::GpuMatConverter(enum AVHWDeviceType device_type, const cv::Size& target_size)
         : _device_type(device_type)
-		, _npp_stream_ctx()
+		, _stream(nullptr), _npp_stream_ctx()
 		, _target_size(target_size)
 		, _buffer()
     {
-		do 
-		{
-			_npp_stream_ctx.nCudaDeviceId = device_index;
-
-			cudaError_t res = cudaDeviceGetAttribute(&_npp_stream_ctx.nCudaDevAttrComputeCapabilityMajor,
-				cudaDevAttrComputeCapabilityMajor,
-				_npp_stream_ctx.nCudaDeviceId);
-			if (res != cudaSuccess)
-			{
-				break;
-			}
-
-			res = cudaDeviceGetAttribute(&_npp_stream_ctx.nCudaDevAttrComputeCapabilityMinor,
-				cudaDevAttrComputeCapabilityMinor,
-				_npp_stream_ctx.nCudaDeviceId);
-			if (res != cudaSuccess)
-			{
-				break;
-			}
-
-			res = cudaStreamGetFlags(_npp_stream_ctx.hStream, &_npp_stream_ctx.nStreamFlags);
-			if (res != cudaSuccess)
-			{
-				break;
-			}
-
-			cudaDeviceProp oDeviceProperties;
-			res = cudaGetDeviceProperties(&oDeviceProperties, _npp_stream_ctx.nCudaDeviceId);
-			if (res != cudaSuccess)
-			{
-				break;
-			}
-
-			_npp_stream_ctx.nMultiProcessorCount = oDeviceProperties.multiProcessorCount;
-			_npp_stream_ctx.nMaxThreadsPerMultiProcessor = oDeviceProperties.maxThreadsPerMultiProcessor;
-			_npp_stream_ctx.nMaxThreadsPerBlock = oDeviceProperties.maxThreadsPerBlock;
-			_npp_stream_ctx.nSharedMemPerBlock = oDeviceProperties.sharedMemPerBlock;
-		} while (false);
     }
 
     GpuMatConverter::~GpuMatConverter()
     {
     }
 
-    int GpuMatConverter::Convert(AVFrame* frame, cv::cuda::GpuMat& image, cv::cuda::Stream& stream)
+    cudaError_t GpuMatConverter::SetDevice(int device_index, cv::cuda::Stream* stream)
+    {
+        cudaError_t res = cudaSuccess;
+        _npp_stream_ctx.nCudaDeviceId = device_index;
+
+        do
+        {
+            res = cudaDeviceGetAttribute(&_npp_stream_ctx.nCudaDevAttrComputeCapabilityMajor,
+                cudaDevAttrComputeCapabilityMajor,
+                _npp_stream_ctx.nCudaDeviceId);
+            if (res != cudaSuccess)
+            {
+                break;
+            }
+
+            _npp_stream_ctx.hStream = CUDA_STREAM(*stream);
+            if (cudaStreamGetFlags(_npp_stream_ctx.hStream, &_npp_stream_ctx.nStreamFlags) != cudaSuccess)
+            {
+                break;
+            }
+
+            res = cudaDeviceGetAttribute(&_npp_stream_ctx.nCudaDevAttrComputeCapabilityMinor,
+                cudaDevAttrComputeCapabilityMinor,
+                _npp_stream_ctx.nCudaDeviceId);
+            if (res != cudaSuccess)
+            {
+                break;
+            }
+
+            cudaDeviceProp oDeviceProperties;
+            res = cudaGetDeviceProperties(&oDeviceProperties, _npp_stream_ctx.nCudaDeviceId);
+            if (res != cudaSuccess)
+            {
+                break;
+            }
+
+            _npp_stream_ctx.nMultiProcessorCount = oDeviceProperties.multiProcessorCount;
+            _npp_stream_ctx.nMaxThreadsPerMultiProcessor = oDeviceProperties.maxThreadsPerMultiProcessor;
+            _npp_stream_ctx.nMaxThreadsPerBlock = oDeviceProperties.maxThreadsPerBlock;
+            _npp_stream_ctx.nSharedMemPerBlock = oDeviceProperties.sharedMemPerBlock;
+
+            _stream = stream;
+        } while (false);
+
+        return res;
+    }
+
+    int GpuMatConverter::Convert(AVFrame* frame, cv::cuda::GpuMat& image)
     {
 		NppStatus res = NPP_SUCCESS;
         do 
         {
-            if (_device_type != AV_HWDEVICE_TYPE_CUDA)
+            if (_device_type != AV_HWDEVICE_TYPE_CUDA || !_stream)
             {
                 res = NPP_BAD_ARGUMENT_ERROR;
                 break;
             }
-
-			_npp_stream_ctx.hStream = CUDA_STREAM(stream);
 
 			NppiSize npp_size{ frame->width, frame->height };
 			if (!_target_size.empty())
@@ -123,13 +130,10 @@ namespace ffmpeg
 
 			if (_buffer.size() != image.size())
 			{
-				cv::cuda::resize(_buffer, image, _target_size, 0, 0, cv::INTER_LINEAR, stream);
+				cv::cuda::resize(_buffer, image, _target_size, 0, 0, cv::INTER_LINEAR, *_stream);
 			}
 
-            if (NPP_SUCCESS == res)
-            {
-                stream.waitForCompletion();
-            }
+            _stream->waitForCompletion();
         } while (false);
 
         return res;

@@ -20,8 +20,8 @@ namespace ffmpeg
 {
     inline static int64_t milliseconds_since_epoch()
     {
-        typedef std::chrono::milliseconds time_precision;
-        typedef std::chrono::time_point<std::chrono::system_clock, time_precision> time_point_precision;
+        using time_precision = std::chrono::milliseconds;
+        using time_point_precision = std::chrono::time_point<std::chrono::system_clock, time_precision>;
         time_point_precision tp = std::chrono::time_point_cast<time_precision>(std::chrono::system_clock::now());
         return tp.time_since_epoch().count();
     }
@@ -41,7 +41,7 @@ namespace ffmpeg
         , format_context(nullptr), streams(nullptr)
         , video_stream_index(-1), video_codecpar(nullptr)
         , audio_stream_index(-1), audio_codecpar(nullptr)
-        , _stream_indexs(AVMEDIA_TYPE_NB, -1)
+        , _stream_indexs(64, -1)
         , _write_timeout(1000LL), _write_at(0LL)
 	{
 		avformat_alloc_output_context2(&format_context, _oformat, _format_name, _url.c_str());
@@ -51,7 +51,7 @@ namespace ffmpeg
     {
     }
 
-    int Muxer::AddStream(const AVCodec* codec, const AVCodecContext* codec_context)
+    int Muxer::AddStream(const AVCodec* codec, const AVCodecContext* codec_context, int stream_index)
     {
         int res = 0;
 
@@ -77,6 +77,13 @@ namespace ffmpeg
             out_stream->time_base = codec_context->time_base;
             out_stream->avg_frame_rate = codec_context->framerate;
             out_stream->r_frame_rate = out_stream->avg_frame_rate;
+
+            out_stream->index = format_context->nb_streams - 1;
+            out_stream->codecpar->codec_tag = 0;
+
+            _stream_indexs[stream_index] = out_stream->index;
+
+            parseParameters(out_stream);
         } while (false);
 
         return res;
@@ -109,8 +116,13 @@ namespace ffmpeg
             {
                 break;
             }
-
+            
+            out_stream->index = format_context->nb_streams - 1;
             out_stream->codecpar->codec_tag = 0;
+
+            _stream_indexs[stream->index] = out_stream->index;
+
+            parseParameters(out_stream);
         } while (false);
 
         return res;
@@ -148,7 +160,12 @@ namespace ffmpeg
                     break;
                 }
 
+                out_stream->index = format_context->nb_streams - 1;
                 out_stream->codecpar->codec_tag = 0;
+
+                _stream_indexs[stream->index] = out_stream->index;
+
+                parseParameters(out_stream);
             }
         } while (false);
 
@@ -206,7 +223,6 @@ namespace ffmpeg
                 break;
             }
 
-            parseParameters();
         } while (false);
 
         if (param)
@@ -217,22 +233,22 @@ namespace ffmpeg
         return res;
     }
 
-    int Muxer::Write(const AVPacket* packet)
+    int Muxer::Write(const AVPacket* packet, const AVRational& stream_time_base)
     {
         int res = 0;
-        if (_stream_indexs[(int)(packet->opaque)] >= 0)
+        int stream_index = -1;
+        if (packet->stream_index >= 0 && (stream_index = _stream_indexs[packet->stream_index]) >= 0)
         {
             AVPacket tomux;
             if ((res = av_packet_ref(&tomux, packet)) >= 0)
             {
-                tomux.stream_index = _stream_indexs[(int)(packet->opaque)];
+                tomux.stream_index = stream_index;
 
-                const AVRational& in_time_base = packet->time_base;
                 const AVRational& out_time_base = format_context->streams[tomux.stream_index]->time_base;
                 /* copy packet */
-                tomux.pts = av_rescale_q_rnd(tomux.pts, in_time_base, out_time_base, static_cast<AVRounding>(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                tomux.dts = av_rescale_q_rnd(tomux.dts, in_time_base, out_time_base, static_cast<AVRounding>(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                tomux.duration = av_rescale_q(tomux.duration, in_time_base, out_time_base);
+                tomux.pts = av_rescale_q_rnd(tomux.pts, stream_time_base, out_time_base, static_cast<AVRounding>(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                tomux.dts = av_rescale_q_rnd(tomux.dts, stream_time_base, out_time_base, static_cast<AVRounding>(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                tomux.duration = av_rescale_q(tomux.duration, stream_time_base, out_time_base);
                 tomux.pos = -1;
 
                 _write_at = milliseconds_since_epoch();
@@ -291,31 +307,24 @@ namespace ffmpeg
         }
     }
 
-    void Muxer::parseParameters()
+    void Muxer::parseParameters(const AVStream* stream)
     {
-        streams = format_context->streams;
-        for (int i = 0; i < static_cast<int>(format_context->nb_streams); ++i)
+        switch (stream->codecpar->codec_type)
         {
-            const AVCodecParameters *codecpar = streams[i]->codecpar;
-            switch (codecpar->codec_type)
-            {
-            case AVMEDIA_TYPE_VIDEO:
-            {
-                video_stream_index = i;
-                video_codecpar = codecpar;
-                break;
-            }
-            case AVMEDIA_TYPE_AUDIO:
-            {
-                audio_stream_index = i;
-                audio_codecpar = codecpar;
-                break;
-            }
-            default:
-                break;
-            }
-
-            _stream_indexs[codecpar->codec_type] = i;
+        case AVMEDIA_TYPE_VIDEO:
+        {
+            video_stream_index = stream->index;
+            video_codecpar = stream->codecpar;
+            break;
+        }
+        case AVMEDIA_TYPE_AUDIO:
+        {
+            audio_stream_index = stream->index;
+            audio_codecpar = stream->codecpar;
+            break;
+        }
+        default:
+        {}
         }
     }
 

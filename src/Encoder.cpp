@@ -340,7 +340,7 @@ namespace ffmpeg
         return res;
     }
 
-    int Encoder::Encode(const AVFrame* frame, const AVRational& time_base, const std::function<void(AVPacket*)>& encode_callback)
+    int Encoder::Encode(const AVFrame* frame, const std::function<void(AVPacket*)>& encode_callback)
     {
         int res = 0;
         do 
@@ -411,8 +411,6 @@ namespace ffmpeg
                         break;
                     }
 
-                    _packet->time_base = time_base;
-
                     _packet->duration = frame->pkt_duration;
 
                     // pass through the opaque
@@ -427,7 +425,7 @@ namespace ffmpeg
         return res;
     }
 
-	int Encoder::Encode(const AVFrame* frame, const AVRational& time_base, std::list<AVPacket*>& packets, size_t& size)
+	int Encoder::Encode(const AVFrame* frame, std::list<AVPacket*>& packets, size_t& size)
 	{
 		int res = 0;
 		do
@@ -493,8 +491,6 @@ namespace ffmpeg
 						av_packet_free(&packet);
 						break;
 					}
-
-					packet->time_base = time_base;
 
 					packet->duration = frame->pkt_duration;
 

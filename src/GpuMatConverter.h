@@ -37,15 +37,18 @@ namespace ffmpeg
     class GpuMatConverter
     {
     public:
-        explicit GpuMatConverter(enum AVHWDeviceType device_type, int device_index, const cv::Size& target_size);
+        explicit GpuMatConverter(enum AVHWDeviceType device_type, const cv::Size& target_size);
         ~GpuMatConverter();
 
-        int Convert(AVFrame* frame, cv::cuda::GpuMat& image, cv::cuda::Stream& stream);
+        cudaError_t SetDevice(int device_index, cv::cuda::Stream* stream);
+
+        int Convert(AVFrame* frame, cv::cuda::GpuMat& image);
 
     private:
 		enum AVHWDeviceType _device_type;
 
 	private:
+        cv::cuda::Stream* _stream;
 		NppStreamContext _npp_stream_ctx;
 
 	private:

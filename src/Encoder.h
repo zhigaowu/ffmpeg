@@ -112,9 +112,9 @@ namespace ffmpeg
 
         int Create(enum AVCodecID codec_id, int flags, enum AVHWDeviceType device_type, int device_index, void* context_initializer, int initialize_method = AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX, void* userdata = nullptr, const std::map<std::string,std::string>& codec_options = std::map<std::string, std::string>(), const std::map<std::string, std::string>& device_options = std::map<std::string, std::string>());
         
-        int Encode(const AVFrame* frame, const AVRational& time_base, const std::function<void(AVPacket*)>& encode_callback);
+        int Encode(const AVFrame* frame, const std::function<void(AVPacket*)>& encode_callback);
 
-		int Encode(const AVFrame* frame, const AVRational& time_base, std::list<AVPacket*>& packets, size_t& size);
+		int Encode(const AVFrame* frame, std::list<AVPacket*>& packets, size_t& size);
 
         void Destroy();
 

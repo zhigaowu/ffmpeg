@@ -396,7 +396,7 @@ namespace ffmpeg
         return res;
     }
 
-    int Decoder::Decode(const AVPacket* packet, const std::function<void(AVFrame*)>& decode_callback, int64_t start_pts)
+    int Decoder::Decode(const AVPacket* packet, const std::function<void(const AVPacket*, AVFrame*)>& decode_callback, int64_t start_pts)
     {
         int res = avcodec_send_packet(decode_context->codec_context, packet);
         do 
@@ -423,13 +423,13 @@ namespace ffmpeg
                         break;
                     }
 
-                    if (packet->pts >= start_pts && decode_callback)
+                    if (packet->pts >= start_pts && _frame->data[0])
                     {
                         // pass through the opaque
                         _frame->opaque = packet->opaque;
 
                         // call decode callback
-                        decode_callback(_frame);
+                        decode_callback(packet, _frame);
                     }
                 }
             }
@@ -468,12 +468,12 @@ namespace ffmpeg
 						break;
 					}
 					else if (res < 0)
-					{
-						av_frame_free(&frame);
+                    {
+                        av_frame_free(&frame);
 						break;
 					}
 
-					if (packet->pts >= start_pts)
+					if (packet->pts >= start_pts && frame->data[0])
 					{
 						// pass through the opaque
 						frame->opaque = packet->opaque;
@@ -486,6 +486,10 @@ namespace ffmpeg
 						++size;
 						frames.push_back(frame);
 					}
+                    else
+                    {
+                        av_frame_free(&frame);
+                    }
 				}
 			}
 		} while (false);

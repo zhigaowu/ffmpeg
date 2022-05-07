@@ -129,16 +129,10 @@ namespace ffmpeg
         return res;
     }
 
-    int Demuxer::Read(AVPacket** packet)
+    int Demuxer::Read(AVPacket* packet)
     {
         _read_at = milliseconds_since_epoch();
-        int res = av_read_frame(format_context, *packet);
-        if (res >= 0)
-        {
-            (*packet)->time_base = streams[(*packet)->stream_index]->time_base;
-            (*packet)->opaque = (void*)streams[(*packet)->stream_index]->codecpar->codec_type;
-        }
-        return res;
+        return av_read_frame(format_context, packet);
     }
 
 	bool Demuxer::Local()

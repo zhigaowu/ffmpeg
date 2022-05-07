@@ -54,7 +54,7 @@ namespace ffmpeg
         explicit Muxer(const std::string& url, const char* format_name = nullptr, const AVOutputFormat *oformat = nullptr);
         ~Muxer();
 
-        int AddStream(const AVCodec* codec, const AVCodecContext* codec_context);
+        int AddStream(const AVCodec* codec, const AVCodecContext* codec_context, int stream_index);
 
         int AddStream(const AVStream* stream);
 
@@ -62,7 +62,7 @@ namespace ffmpeg
 
         int Open(int64_t connect_timeout, int64_t read_timeout, const std::map<std::string, std::string>& options = std::map<std::string, std::string>());
 
-        int Write(const AVPacket* packet);
+        int Write(const AVPacket* packet, const AVRational& stream_time_base);
 
         bool Timeout();
 
@@ -71,7 +71,7 @@ namespace ffmpeg
     private:
         bool checkStream(const AVStream* stream);
 
-        void parseParameters();
+        void parseParameters(const AVStream* stream);
 
     private:
         std::string _url;
